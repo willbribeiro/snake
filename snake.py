@@ -186,7 +186,10 @@ class SnakeGame:
             
         head_x, head_y = self.snake_list[0]
         
-        for segment in self.snake_list[1:]:
+        # Convert deque to list for slicing (deque doesn't support slicing directly)
+        snake_segments = list(self.snake_list)
+        
+        for segment in snake_segments[1:]:
             if head_x == segment[0] and head_y == segment[1]:
                 return True
         
@@ -367,6 +370,22 @@ class SnakeGame:
         
         # Process buffered input - Phase 1 feature (prevents quick death)
         self.process_input()
+        
+        # Move snake if not on game over screen
+        if self.game_state != 'game_over':
+            head_x = self.x + self.x_change
+            head_y = self.y + self.y_change
+            
+            # Update position
+            self.x = head_x
+            self.y = head_y
+            
+            # Add new head to list
+            self.snake_list.appendleft((head_x, head_y))
+            
+            # Shrink snake if needed (if we haven't grown this frame)
+            if len(self.snake_list) > self.snake_length:
+                removed = self.snake_list.pop()
         
         # Check collisions in priority order
         game_over = False
