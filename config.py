@@ -73,3 +73,22 @@ DIFFICULTY_CONFIG = {
 POWERUP_CHANCE = 0.05  # 5% chance to spawn power-up with food
 POWERUP_DURATION = 5000  # Milliseconds for timed power-ups
 POWERUP_TYPES = ['speed', 'shield']
+
+# Visual Polish Settings (Phase 4)
+VISUAL_POLISH = {
+    'head_eyes': True,          # Show eyes on snake head
+    'body_gradient': True,       # Subtle gradient on body
+    'food_shine': True,         # Shine effect on food
+    'particle_effects': True,    # Enable particle effects
+    
+    # Particle settings
+    'food_particles_count': 12,      # Particles when eating food
+    'spark_particles_count': 6,      # Spark particles for variety
+    
+    # Animation settings
+    'food_pulse_rate': 0.05,         # How fast food pulses
+    
+    # Enable/disable features
+    'enable_head_eyes': True,
+    'enable_body_gradient': True,
+}
