@@ -180,6 +180,10 @@ class SnakeGame:
     
     def check_self_collision(self):
         """Check if snake collided with itself."""
+        # Return False if snake has no segments (empty list)
+        if not self.snake_list:
+            return False
+            
         head_x, head_y = self.snake_list[0]
         
         for segment in self.snake_list[1:]:
@@ -190,6 +194,10 @@ class SnakeGame:
     
     def check_wall_collision(self):
         """Check if snake hit walls."""
+        # Return False if snake has no segments (empty list)
+        if not self.snake_list:
+            return False
+            
         head_x, head_y = self.snake_list[0]
         
         if head_x >= config.SCREEN_WIDTH or head_x < 0:
@@ -201,6 +209,10 @@ class SnakeGame:
     
     def check_food_collision(self):
         """Check if snake ate food."""
+        # Return False if snake has no segments (empty list)
+        if not self.snake_list:
+            return False
+            
         head_x, head_y = self.snake_list[0]
         
         if head_x == self.food_x and head_y == self.food_y:
@@ -220,6 +232,30 @@ class SnakeGame:
         """Save high score to file - Phase 1 feature."""
         with open(self.high_score_file, 'w') as f:
             f.write(str(self.high_score))
+    
+    def start_game(self):
+        """Transition from menu to playing state with proper initialization."""
+        self.game_state = 'playing'
+        
+        # Reset snake to starting position with 3 segments
+        self.snake_list.clear()
+        self.snake_length = 3
+        
+        # Place initial snake segments in a line
+        start_x = config.SCREEN_WIDTH // 2 - (self.snake_block * 2) / 2
+        start_y = config.SCREEN_HEIGHT // 2
+        
+        # Add 3 starting segments
+        for i in range(3):
+            self.snake_list.appendleft((start_x + i * self.snake_block, start_y))
+        
+        # Spawn initial food (this will also check for valid position)
+        self.spawn_food()
+        
+        # Set movement direction to right by default
+        self.x_change = self.snake_block
+        self.y_change = 0
+        self.direction = 'RIGHT'
     
     def draw_rect(self, color, x, y, size):
         """Helper to draw rectangle with anti-aliasing."""
@@ -325,6 +361,10 @@ class SnakeGame:
         if event_quit:
             return False
         
+        # Transition from menu to playing state with proper initialization
+        if self.game_state == 'menu' and not self.snake_list:
+            self.start_game()
+        
         # Process buffered input - Phase 1 feature (prevents quick death)
         self.process_input()
         
@@ -349,6 +389,10 @@ class SnakeGame:
             if self.score > self.high_score:
                 self.high_score = self.score
                 self.save_high_score()
+        
+        # If we're in menu state and snake was cleared, reinitialize it
+        if self.game_state == 'menu' and not self.snake_list:
+            self.start_game()
         
         # Draw everything
         self.draw_game()
