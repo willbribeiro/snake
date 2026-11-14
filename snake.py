@@ -355,7 +355,7 @@ class SnakeGame:
     
     def game_loop(self):
         """Main game loop."""
-        # Game over conditions
+        # Game over conditions - only check if we're actually playing
         if self.game_state == 'game_over':
             return False
         
@@ -371,8 +371,8 @@ class SnakeGame:
         # Process buffered input - Phase 1 feature (prevents quick death)
         self.process_input()
         
-        # Move snake if not on game over screen
-        if self.game_state != 'game_over':
+        # Move snake if not on game over screen AND we have movement direction
+        if self.game_state != 'game_over' and (self.x_change != 0 or self.y_change != 0):
             head_x = self.x + self.x_change
             head_y = self.y + self.y_change
             
@@ -387,21 +387,23 @@ class SnakeGame:
             if len(self.snake_list) > self.snake_length:
                 removed = self.snake_list.pop()
         
-        # Check collisions in priority order
+        # Check collisions in priority order - ONLY if snake has moved at least once
         game_over = False
         
-        # 1. Wall collision
-        if self.check_wall_collision():
-            game_over = True
-        # 2. Self collision
-        elif self.check_self_collision():
-            game_over = True
-        # 3. Food eating
-        elif self.check_food_collision():
-            # Grow snake
-            self.snake_length += 1
-            # Spawn new food
-            self.spawn_food()
+        # Only check collisions after first movement (prevent immediate death on start)
+        if len(self.snake_list) > 1:  # Snake needs to have moved at least once
+            # 1. Wall collision
+            if self.check_wall_collision():
+                game_over = True
+            # 2. Self collision
+            elif self.check_self_collision():
+                game_over = True
+            # 3. Food eating
+            elif self.check_food_collision():
+                # Grow snake
+                self.snake_length += 1
+                # Spawn new food
+                self.spawn_food()
         
         if game_over:
             self.game_state = 'game_over'
@@ -421,17 +423,27 @@ class SnakeGame:
 
 def main():
     """Main function to start the game."""
-    game = SnakeGame()
-    
-    running = True
-    while running:
-        if game.game_loop():
-            continue
+    try:
+        game = SnakeGame()
         
-        if game.game_state == 'quit':
-            break
+        running = True
+        while running:
+            if game.game_loop():
+                continue
+            
+            if game.game_state == 'quit':
+                break
+        
+        pygame.quit()
     
-    pygame.quit()
+    except Exception as e:
+        # Handle any errors gracefully - show error and allow quit
+        print(f"Error: {e}")
+        print("Press Ctrl+C to exit")
+        
+        # Give user time to see error message
+        import time
+        time.sleep(2)
 
 
 if __name__ == '__main__':
