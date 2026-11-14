@@ -46,14 +46,12 @@ python -m snake
 
 | Key | Action |
 |-----|--------|
-| `↑` / `W` | Move Up |
-| `↓` / `S` | Move Down |
-| `→` / `D` | Move Right |
-| `←` / `A` | Move Left |
-| `P` | Pause/Resume Game |
-| `Enter` / `Space` | Start Game (from Menu) |
-| `C` | Continue (from Game Over) |
-| `Q` | Quit Game |
+| `↑` `↓` `←` `→` | Move |
+| `Enter` / `Space` | Start game (menu) / Play again (game over) |
+| `P` | Pause / Resume |
+| `C` | Play again (game over) |
+| `Q` | Back to menu (game over) |
+| `Esc` | Quit |
 
 ## 📁 Project Structure
 
