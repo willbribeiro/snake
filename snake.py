@@ -6,9 +6,10 @@ One event loop that ALWAYS processes events and draws -> window can never freeze
 
 States: menu -> playing <-> paused -> game_over -> (menu | playing)
 Controls: ENTER/SPACE start | Arrows move | P pause | C replay | Q menu | ESC quit
+
+Run tests with:  python -m unittest test_snake -v
 """
 
-import json
 import random
 from collections import deque
 
@@ -35,8 +36,8 @@ DIRECTIONS = {
 
 
 class SnakeGame:
-    def __init__(self):
-        self.high_score_file = 'highscore.json'
+    def __init__(self, highscore_file=None):
+        self.high_score_file = highscore_file or config.HIGHSCORE_FILE
         self.high_score = self._load_high_score()
         self._reset_to_menu()
 
@@ -56,38 +57,37 @@ class SnakeGame:
             pass
 
     # ---------- state ----------
+    def _init_run_stats(self):
+        """Defaults shared by 'back to menu' and 'start a run'."""
+        self.score = 0
+        self.level = 1
+        self.speed = config.INITIAL_SPEED
+        self.length = config.STARTING_LENGTH
+        self.direction = (1, 0)
+        self.pending = deque()   # buffered direction changes
+
     def _reset_to_menu(self):
         """Fresh object state. The game ALWAYS starts on the menu and waits."""
         self.state = 'menu'      # menu | playing | paused | game_over
-        self.score = 0
-        self.level = 1
-        self.speed = config.INITIAL_SPEED
         self.snake_block = config.BLOCK_SIZE
         self.snake = deque()     # head is snake[0]; single source of truth
-        self.length = 3
-        self.direction = (1, 0)
-        self.pending = deque()   # buffered direction changes
         self.food = None
+        self._init_run_stats()
 
     def start_run(self):
-        """Begin a run: snake of 3 aligned segments at the center, moving right."""
+        """Begin a run: snake of aligned segments at the center, moving right."""
+        self._init_run_stats()
         self.state = 'playing'
-        self.score = 0
-        self.level = 1
-        self.speed = config.INITIAL_SPEED
-        self.length = 3
         blocks_x = config.SCREEN_WIDTH // self.snake_block
         blocks_y = config.SCREEN_HEIGHT // self.snake_block
         cx = blocks_x // 2 * self.snake_block
         cy = blocks_y // 2 * self.snake_block
-        # Head first, then two body cells BEHIND it (matching direction).
+        # Head first, then body cells BEHIND it (matching direction).
         self.snake = deque([
             (cx, cy),
             (cx - self.snake_block, cy),
             (cx - 2 * self.snake_block, cy),
         ])
-        self.direction = (1, 0)
-        self.pending.clear()
         self.food = self._spawn_food()
 
     def _spawn_food(self):
@@ -132,13 +132,13 @@ class SnakeGame:
         # 3. Move (only after surviving the checks above)
         self.snake.appendleft((nx, ny))
         if self.food is not None and (nx, ny) == self.food:
-            self.score += 10
+            self.score += config.POINTS_PER_FOOD
             self.length += 1
             self.food = self._spawn_food()
-            if self.score % 50 == 0:
+            if self.score % config.POINTS_PER_LEVEL == 0:
                 self.level += 1
                 self.speed = min(self.speed + config.SPEED_INCREMENT,
-                                 config.MIN_SPEED)
+                                 config.MAX_SPEED)
         else:
             self.snake.pop()
             while len(self.snake) > self.length:
@@ -166,7 +166,7 @@ class SnakeGame:
         elif self.state == 'playing':
             if event.key == pygame.K_p:
                 self.state = 'paused'
-            elif event.key in DIRECTIONS and len(self.pending) < 2:
+            elif event.key in DIRECTIONS and len(self.pending) < config.INPUT_BUFFER_SIZE:
                 self.pending.append(DIRECTIONS[event.key])
         elif self.state == 'paused':
             if event.key in (pygame.K_p, pygame.K_RETURN, pygame.K_SPACE):
@@ -222,12 +222,13 @@ class SnakeGame:
         for i in range(len(segs) - 1, 0, -1):
             x, y = segs[i]
             t = i / max(1, len(segs) - 1)
-            c = 15 + int(55 * t)
-            pygame.draw.rect(dis, (c, c, c),
+            gray = config.BODY_GRAY_MIN + int(
+                (config.BODY_GRAY_MAX - config.BODY_GRAY_MIN) * t)
+            pygame.draw.rect(dis, (gray, gray, gray),
                              [x, y, self.snake_block, self.snake_block])
         # Head with eyes that look where the snake is going.
         hx, hy = segs[0]
-        pygame.draw.rect(dis, config.SNAKE_COLORS['head'],
+        pygame.draw.rect(dis, config.SNAKE_HEAD_COLOR,
                          [hx, hy, self.snake_block, self.snake_block])
         self._draw_eyes(hx, hy)
 
@@ -275,7 +276,8 @@ class SnakeGame:
             if self.state == 'quit':
                 running = False
             else:
-                clock.tick(self.speed if self.state == 'playing' else 30)
+                clock.tick(self.speed if self.state == 'playing'
+                           else config.UI_FPS)
 
         pygame.quit()
 

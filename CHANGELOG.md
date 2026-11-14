@@ -1,219 +1,48 @@
-# 🐍 Snake Game - Changelog
+# Changelog
 
-## [Unreleased] (v2.0) - Visual Polish Phase
+## 2.1 - 2026-11-14
+
+### Changed
+- Code-quality pass:
+  - Removed dead modules (`snake_v2`, `snake_main`, `snake_refactored`,
+    `snake_enhanced`, `snake_melhorado`, `powerups`, `particles`,
+    `visual_snake`) - none were imported by the game and several contained
+    latent bugs (references to nonexistent attributes).
+  - Removed stale documentation that described deleted features.
+  - Extracted magic numbers into `config.py`: `POINTS_PER_FOOD`,
+    `POINTS_PER_LEVEL`, `STARTING_LENGTH`, `INPUT_BUFFER_SIZE`, `UI_FPS`,
+    `BODY_GRAY_MIN/MAX`, `HIGHSCORE_FILE`; renamed `MIN_SPEED` -> `MAX_SPEED`
+    (same value, honest name).
+  - Deduplicated run-state initialization (`_init_run_stats` shared by menu
+    reset and `start_run`).
+  - `SnakeGame` accepts an optional `highscore_file` path (aids testing;
+    default unchanged).
 
 ### Added
-- **Particle Effects System**
-  - Particle burst when eating food
-  - Dynamic particle colors (green, gold, white sparks)
-  - Configurable particle count and lifetime
-  - Particles fade out smoothly over time
+- `test_snake.py`: 29 unit tests (headless) covering startup, menu wait,
+  movement, eating, buffering/reversal, wall/self/tail collisions, level-up
+  and speed cap, pause, game-over navigation, quit, high-score persistence,
+  and draw-in-every-state.
 
-- **Enhanced Snake Head Graphics**
-  - Directional eyes that look in movement direction
-  - White sclera with black pupils
-  - Subtle shine reflection on eyes
-  - Eyes positioned based on snake direction
+## 2.0 - 2026-11-13
 
-- **Body Gradient Effect**
-  - Subtle color variation along snake body
-  - Lighter segments near tail create depth
-  - Configurable gradient intensity
+### Fixed
+- Rewrote the game loop after crash reports:
+  - Head is `snake[0]` (single source of truth) - fixes instant self-collision
+    on the first movement step caused by position desync.
+  - Events are drained and the screen drawn in every state - fixes the frozen,
+    unresponsive game-over screen.
+  - Menu only exits on user input - fixes the menu being skipped on frame one.
+- Bug fixes retained from 1.x: empty-snake guards removed along with the
+  rewrite; collision-before-move order; free-cell food spawning.
 
-- **Food Visual Enhancements**
-  - Pulsing animation effect
-  - Shine/reflection on food surface
-  - Glowing green appearance
-  - Color change to red when shield active
+### Added
+- Input buffering with reversal rejection.
+- State machine (menu / playing / paused / game over), pause on `P`.
+- High score persistence to `highscore.json`.
+- Head eyes facing the movement direction, body gradient.
 
-- **Visual Polish Settings**
-  - New `VISUAL_POLISH` section in config.py
-  - Toggleable features in one place
-  - Granular control over visual effects
-  - Default settings optimized for best experience
+## 1.0 - 2026-11-13 (initial commits)
 
-### Files Created/Modified
-- `particles.py` - Particle system implementation
-- `visual_snake.py` - Enhanced snake graphics class
-- `snake_v2.py` - Complete v2.0 game file with all features
-- `config.py` - Added visual polish settings section
-
----
-
-## [1.0] (v1.0) - Core Improvements Phase
-
-### Phase 1: Core Refactoring & Code Quality ✓
-
-#### Features Added:
-- **Input Buffering System**
-  - Direction queue using deque
-  - Prevents "quick death" from rapid key presses
-  - Processes one direction per frame
-  
-- **State Management Architecture**
-  - States: menu → playing → paused → game_over → quit
-  - Clean separation of concerns
-  - Event-driven state transitions
-
-- **High Score Persistence**
-  - Saves to highscore.json file
-  - Loads automatically on game start
-  - Displays on all relevant screens
-
-- **Score & Level HUD**
-  - Current score displayed top-left
-  - Level indicator visible during gameplay
-  - High score shown bottom-left
-
-#### Features Added:
-- **Main Menu System**
-  - Title display with game name
-  - High score prominently shown
-  - Start instruction clearly visible
-  - Control hints included
-
-- **Enhanced Game Over Screen**
-  - Final score displayed
-  - High score comparison
-  - Level reached information
-  - Restart or quit options
-
-- **Pause Functionality**
-  - P key toggle during gameplay
-  - Pause overlay with instructions
-  - Smooth resume capability
-
-#### Features Added:
-- **PowerUpManager Class**
-  - Power-up spawning (5% chance)
-  - Activation system for power-ups
-  - Support for multiple power-up types
-  - Visual indicator system ready
-
-### Files Created/Modified
-- `snake.py` - Complete rewrite with all Phase 1 features
-- `config.py` - Configuration module created
-- `highscore.json` - High score storage file
-- `powerups.py` - Power-up system implementation
-- `README.md` - Complete documentation (rewritten)
-- `INSTALL.md` - Installation guide
-- `QUICKSTART.md` - Quick start reference
-- `PROJECT_SUMMARY.md` - Project summary
-- `IMPLEMENTATION_STATUS.md` - Implementation report
-
-### Architecture Changes
-- Replaced monolithic function with class-based design
-- Separated configuration into dedicated module
-- Implemented event-driven state transitions
-- Added collision detection priority system
-- Enhanced food spawning logic
-
----
-
-## [0.5] (Original) - Basic Implementation
-
-### Original Features:
-- Basic snake movement with arrow keys
-- Simple growth mechanic on food consumption
-- Speed increases per level
-- Game over on wall/self collision
-- Quit or restart options
-
-### Known Issues in Original:
-- No input buffering (quick death possible)
-- No high score persistence
-- No pause functionality
-- No menus or overlays
-- Monolithic code structure
-
----
-
-## Summary of Improvements
-
-### Code Quality
-- **Before**: ~116 lines, single function
-- **After v2.0**: ~500+ lines, class-based, well-documented
-
-### Features Added (Total)
-- Input buffering ✓
-- State management ✓
-- High score persistence ✓
-- Score HUD ✓
-- Main menu ✓
-- Game over screen ✓
-- Pause functionality ✓
-- Power-up system ✓
-- Particle effects ✨
-- Enhanced graphics ✨
-- Visual polish ✨
-
-### User Experience Improvements
-- No unfair deaths from rapid key presses
-- Clear visual feedback for all game states
-- Persistent progress tracking
-- Professional-looking interface
-- Engaging particle effects
-- Directional visual indicators
-
----
-
-## Installation Guide (Quick Reference)
-
-```bash
-# Install dependencies
-pip install pygame
-
-# Run the enhanced version
-python snake.py           # Original improved version
-python snake_v2.py        # v2.0 with visual polish
-```
-
-## Controls (All Versions)
-
-| Key | Action |
-|-----|--------|
-| ↑↓←→ | Move snake |
-| P | Pause/Resume |
-| Enter | Start game (menu) |
-| C | Continue (game over) |
-| Q | Quit |
-
----
-
-## Configuration Options (config.py)
-
-```python
-# Core settings
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-INITIAL_SPEED = 15
-MIN_SPEED = 40
-
-# Visual polish options
-VISUAL_POLISH = {
-    'head_eyes': True,
-    'body_gradient': True,
-    'food_shine': True,
-    'particle_effects': True,
-}
-```
-
----
-
-## Roadmap for Future Versions
-
-### v2.1 (In Development)
-- [ ] Sound effects system
-- [ ] Background music toggle
-- [ ] Additional power-up types
-- [ ] Multiple game modes
-
-### v3.0 (Planned)
-- [ ] Advanced particle systems
-- [ ] Level progression system
-- [ ] Leaderboards (local file-based)
-- [ ] Achievement system
-
----
-
-**Built with ❤️ using Python and Pygame**
+- Classic snake gameplay (arrow keys, food, growth, speed-up per level).
+- Menu, game-over screen, high-score display.

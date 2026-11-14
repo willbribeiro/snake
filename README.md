@@ -1,48 +1,24 @@
-# 🐍 Snake Game - Improved Version
+# 🐍 Snake Game
 
-A classic Snake game rewritten with modern features and improved architecture using Python and Pygame.
+A classic Snake game in Python + pygame-ce, focused on a small, robust,
+fully tested codebase.
 
-![Python](https://img.shields.io/badge/Python-3.7+-blue)
-![Pygame](https://img.shields.io/badge/Pygame-2.x-green)
+## Quick start
 
-## ✨ Features (Phase 1 - Completed)
+Requires Python 3.13+ (developed on 3.15).
 
-### Core Improvements
-- ✅ **Input Buffering System** - Prevents "quick death" from rapid key presses
-- ✅ **State Management** - Clean separation between Menu, Playing, Paused, and Game Over states
-- ✅ **High Score Persistence** - Saves and loads your best score to `highscore.json`
-- ✅ **Score & Level Display** - HUD showing current score, level, and high score
-- ✅ **Pause Functionality** - Press `P` key anytime during gameplay to pause/resume
-- ✅ **Anti-Reversal Protection** - Can't reverse direction instantly (prevents accidental self-collision)
-- ✅ **Food Spawn Protection** - Food never spawns on the snake body
-
-### Enhanced User Interface
-- 🎨 **Main Menu Screen** - Attractive title with high score display
-- 🎮 **Game Over Screen** - Shows final score, level reached, and restart options
-- ⏸️ **Pause Overlay** - Clean pause screen with resume instructions
-- 📊 **Score HUD** - Persistent on-screen display during gameplay
-
-## 🚀 Quick Start
-
-### Installation
-1. Make sure you have Python 3.7+ installed
-2. Install Pygame:
-   ```bash
-   pip install pygame
-   ```
-
-### Running the Game
 ```bash
+pip install pygame-ce
 python snake.py
 ```
 
-Or if using pip package format:
+Run the test suite:
+
 ```bash
-pip install -e .
-python -m snake
+python -m unittest test_snake -v
 ```
 
-## 🎮 Controls
+## Controls
 
 | Key | Action |
 |-----|--------|
@@ -53,83 +29,42 @@ python -m snake
 | `Q` | Back to menu (game over) |
 | `Esc` | Quit |
 
-## 📁 Project Structure
+## Features
+
+- State machine: menu → playing ⇄ paused → game over
+- Input buffering with reversal rejection (no unfair deaths from fast keys)
+- Collision checks before movement — walls, self (tail cell is safe to enter)
+- Food only spawns on free cells (never overlaps the snake)
+- Score, level, speed-up every 50 points, capped FPS
+- High score persisted to `highscore.json` (tolerates corrupt files)
+- Head eyes that face the movement direction; subtle body gradient
+- Event loop always drains input and redraws — the window cannot freeze
+
+## Project structure
 
 ```
 snake/
-├── snake.py              # Main game file (refactored with all Phase 1 features)
-├── config.py             # Game constants and settings
-├── snake_main.py         # Alternative refactored version (for reference)
-├── snake_melhorado.py    # Original improved version (legacy)
-├── highscore.json        # Persisted high scores
-└── README.md             # This file
+├── snake.py          # game (entry point)
+├── config.py         # all tunable constants
+├── test_snake.py     # unittest suite (29 tests)
+├── highscore.json    # created at runtime
+├── requirements.txt
+├── INSTALL.md        # installation troubleshooting
+├── CHANGELOG.md
+└── LICENSE
 ```
 
-## 🎯 How to Play
+## Configuration
 
-1. The snake starts in the middle of the screen
-2. Use arrow keys to change direction
-3. Eat the green food blocks to grow and increase your score
-4. Every 50 points, you level up and speed increases!
-5. Avoid hitting your own tail or the walls
-6. Beat your high score! 🏆
+All tuning lives in `config.py`: window size, grid block size, speeds
+(`INITIAL_SPEED`, `SPEED_INCREMENT`, `MAX_SPEED`), scoring
+(`POINTS_PER_FOOD`, `POINTS_PER_LEVEL`), input buffer size, colors, fonts.
 
-## ⚙️ Configuration (config.py)
+## Design notes
 
-All game settings are in `config.py`:
-
-- **Screen Size**: 800x600 pixels
-- **Block Size**: 10 pixels per snake segment
-- **Initial Speed**: 15 FPS
-- **Speed Increment**: +5 FPS per level
-- **Max Speed Cap**: 40 FPS
-- **Power-up Spawn Chance**: 5%
-
-You can modify these values to customize the game difficulty!
-
-## 🔮 Roadmap - Upcoming Features (Future Phases)
-
-### Phase 2: Visual Polish
-- [ ] Snake head with directional eyes
-- [ ] Animated food effects
-- [ ] Particle effects when eating
-- [ ] Better color schemes and gradients
-
-### Phase 3: Power-Up System
-- [ ] Speed Boost power-up
-- [ ] Shield/Invincibility power-up
-- [ ] Length Bonus items
-- [ ] Magnet food attractor
-
-### Phase 4: Game Modes
-- [ ] Classic mode (current)
-- [ ] Endless mode
-- [ ] Time Attack mode
-- [ ] Survival mode
-
-### Phase 5: Sound & Audio
-- [ ] Sound effects for eating, level up, game over
-- [ ] Optional background music
-- [ ] Volume controls
-
-## 🐛 Known Issues & Limitations
-
-- Input buffering queue size is limited to 1 (can only change direction once per frame)
-- Snake starts with length of 3
-- No wrap-around (hitting walls ends the game)
-
-## 🤝 Contributing
-
-Suggestions for improvements are welcome! This project demonstrates:
-- Modern Python coding practices
-- Proper state management
-- Input buffering techniques
-- High score persistence
-
-## 📜 License
-
-This project uses the standard Snake game mechanics. The code is provided as-is for educational purposes.
-
----
-
-**Built with ❤️ using Python and Pygame**
+- The head **is** `snake[0]` — there is no separate position variable, so the
+  head/body can never drift apart (the cause of an earlier "instant death" bug).
+- Events are drained and the screen redrawn in every state, which is what makes
+  the game-over screen responsive.
+- Buffered direction changes are validated against the *live* direction at
+  apply-time, so quick double-turns work but 180° reversals never kill.

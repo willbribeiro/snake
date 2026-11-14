@@ -1,88 +1,50 @@
-# Installation Guide for Snake Game
+# Installation
 
-## Prerequisites
+## Python 3.13 – 3.15 (including 3.15.2)
 
-### Option 1: Using pip (Recommended)
-
-**Step 1: Install pygame**
-
-Try the standard installation first:
-```bash
-pip install --upgrade pip
-pip install pygame
-```
-
-If that fails, try with a pre-built wheel:
-```bash
-pip install "pygame==2.5.0" --find-links=https://www.lfd.uci.edu/~gohlke/pythonlibs/#pygame
-```
-
-**Step 2: Verify Installation**
-```bash
-python -c "import pygame; print('Pygame version:', pygame.version.ver)"
-```
-
-### Option 2: Using Anaconda/Miniconda (Easier on Windows)
+The `pygame` package does not publish wheels for Python 3.15 and building it
+from source fails. Use **pygame-ce** instead — it is a maintained fork with a
+compatible API and prebuilt wheels:
 
 ```bash
-conda create -n snake_env python=3.10 pygame
-conda activate snake_env
-cd C:\Users\ventoy\Documents\snake
-python snake.py
+pip install pygame-ce
 ```
 
-### Option 3: Using Chocolatey
+Verify:
 
 ```bash
-choco install python pygame
+python -c "import pygame; print(pygame.version.ver)"
 ```
 
-## Running the Game
+## Run
 
-After installation, simply run:
 ```bash
 python snake.py
 ```
 
-Or use:
+## Tests
+
 ```bash
-pip install -e .
-python -m snake
+python -m unittest test_snake -v
 ```
+
+The suite runs headless (`SDL_VIDEODRIVER=dummy`), so it works without a
+display.
 
 ## Troubleshooting
 
-### "ModuleNotFoundError: No module named 'pygame'"
+**`ModuleNotFoundError: No module named 'pygame'`**
+Install into the same interpreter you run the game with:
+`py -m pip install pygame-ce` (Windows) or `python3 -m pip install pygame-ce`.
 
-Make sure you installed pygame in the same Python environment you're using to run the game:
-```bash
-# Check which python you're using
-where python
+**`ModuleNotFoundError: No module named 'pygame_ce'`**
+Nothing is wrong — `import pygame` still works after installing pygame-ce;
+the distribution name (`pip install pygame-ce`) differs from the import name.
 
-# Install for that specific python
-py -m pip install pygame  # For Python 3.x on Windows
-```
+**Source-build errors mentioning `distutils` / `msvccompiler`**
+You tried to install classic `pygame` on a Python version without wheels.
+Install `pygame-ce` instead.
 
-### "distutils.msvccompiler" errors
-
-This happens with newer Python versions. Use a pre-built wheel instead:
-```bash
-pip install --upgrade pip
-pip install "pygame==2.5.0" --extra-index-url https://www.lfd.uci.edu/~gohlke/pythonlibs/
-```
-
-### Game window appears black or empty
-
-- Make sure pygame is installed correctly
-- Try running as administrator (some systems need this for window creation)
-
-## Project Structure After Installation
-
-```
-snake/
-├── snake.py              # ← Run this file
-├── config.py             # Game settings
-├── highscore.json        # Your saved scores (created after first game)
-├── requirements.txt      # Python dependencies
-└── INSTALL.md           # This file
-```
+**Black or frozen window**
+Update pygame-ce: `pip install -U pygame-ce`. If it persists, open an issue
+with the traceback.
