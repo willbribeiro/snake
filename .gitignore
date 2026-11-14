@@ -1,0 +1,13 @@
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+
+# Runtime data
+highscore.json
+
+# Environments
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
