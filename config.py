@@ -30,6 +30,16 @@ BODY_GRAY_MAX = 70        # body gradient intensity at the tail
 # Persistence
 HIGHSCORE_FILE = 'highscore.json'
 
+# Game modes
+DEFAULT_MODE = 'classic'
+GAME_MODES = ['classic', 'wrap', 'maze']
+MAZE_GAP_BLOCKS = 5       # half-width of the maze gap, in blocks
+
+# Sound (procedurally synthesized; no asset files)
+SOUND_ENABLED = True
+SOUND_VOLUME = 0.4
+SAMPLE_RATE = 22050
+
 # Power-ups
 POWERUP_CHANCE = 0.2      # chance that eating food also spawns a power-up
 POWERUP_TYPES = ['shield', 'speed', 'length']
@@ -52,6 +62,7 @@ RED = (213, 50, 80)
 GREEN = (0, 255, 0)
 YELLOW = (255, 255, 102)
 SNAKE_HEAD_COLOR = (0, 0, 0)
+OBSTACLE_COLOR = (30, 30, 30)
 
 # Fonts
 FONT_SIZE_LARGE = 50

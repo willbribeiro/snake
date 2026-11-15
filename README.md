@@ -15,7 +15,7 @@ python snake.py
 Run the test suite:
 
 ```bash
-python -m unittest test_snake -v
+python -m unittest discover -v
 ```
 
 ## Controls
@@ -23,6 +23,7 @@ python -m unittest test_snake -v
 | Key | Action |
 |-----|--------|
 | `↑` `↓` `←` `→` | Move |
+| `←` `→` (menu) | Change game mode |
 | `Enter` / `Space` | Start game (menu) / Play again (game over) |
 | `P` | Pause / Resume |
 | `C` | Play again (game over) |
@@ -36,8 +37,27 @@ python -m unittest test_snake -v
 - Collision checks before movement — walls, self (tail cell is safe to enter)
 - Food only spawns on free cells (never overlaps the snake or a power-up)
 - Score, level, speed-up every 50 points, capped FPS
-- High score persisted to `highscore.json` (tolerates corrupt files)
+- Per-mode high scores persisted to `highscore.json` (tolerates corrupt files)
 - Event loop always drains input and redraws — the window cannot freeze
+
+### Game modes
+
+Pick a mode on the menu with `←`/`→`; each mode keeps its own high score.
+
+| Mode | Rules |
+|------|-------|
+| Classic | Walls kill; snake dies on self-collision |
+| Wrap | Screen edges teleport; only self-collision kills |
+| Maze | Two obstacle bars with a gap in the middle; obstacles kill (unless shielded) |
+
+`highscore.json` stores a per-mode dict, e.g. `{"classic": 120, "wrap": 40}`.
+Old single-number files are migrated automatically.
+
+### Sound
+
+Sound effects are synthesized in code (no asset files): an eat blip, pickup
+chime, level-up arpeggio, and a game-over melody. The game degrades silently
+when no audio device is available; toggle with `SOUND_ENABLED` in `config.py`.
 
 ### Power-ups
 
@@ -68,9 +88,13 @@ while active.
 snake/
 ├── snake.py          # game (entry point)
 ├── config.py         # all tunable constants
+├── modes.py          # game mode data (labels, wrap, maze obstacles)
+├── audio.py          # procedural sound synthesis (no asset files)
 ├── powerups.py       # power-up data (types, colors, labels)
 ├── particles.py      # deterministic particle effects
 ├── test_snake.py     # game tests
+├── test_modes.py     # mode module tests
+├── test_audio.py     # audio module tests
 ├── test_powerups.py  # power-up module tests
 ├── test_particles.py # particle module tests
 ├── highscore.json    # created at runtime
@@ -84,7 +108,9 @@ snake/
 
 All tuning lives in `config.py`: window size, grid block size, speeds
 (`INITIAL_SPEED`, `SPEED_INCREMENT`, `MAX_SPEED`), scoring
-(`POINTS_PER_FOOD`, `POINTS_PER_LEVEL`), input buffer size, power-ups
+(`POINTS_PER_FOOD`, `POINTS_PER_LEVEL`), input buffer size, game modes
+(`DEFAULT_MODE`, `GAME_MODES`, `MAZE_GAP_BLOCKS`), sound
+(`SOUND_ENABLED`, `SOUND_VOLUME`, `SAMPLE_RATE`), power-ups
 (`POWERUP_CHANCE`, `POWERUP_TYPES`, `SHIELD_STEPS`, `BOOST_STEPS`,
 `SPEED_BOOST_AMOUNT`, `LENGTH_BONUS`, `POWERUP_POINTS`), and visual effect
 tuning (`FOOD_PULSE_PERIOD`, `PARTICLE_COUNT`, `PARTICLE_LIFETIME`),

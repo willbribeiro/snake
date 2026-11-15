@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.3 - 2026-11-14
+
+### Added
+- Game modes (selected on the menu with LEFT/RIGHT arrows, per-mode high
+  scores):
+  - Classic: current rules (walls and self-collision kill).
+  - Wrap: screen edges teleport to the opposite side; only self-collision
+    kills.
+  - Maze: two horizontal obstacle bars with a gap in the middle; obstacles
+    kill unless the shield is active. Food and power-ups never spawn on
+    obstacles.
+- Sound system: procedural WAV-style synthesis in code (no asset files).
+  - Eat blip, pickup chime, level-up arpeggio, game-over melody.
+  - Degrades gracefully to silence when no audio device is available.
+  - `SOUND_ENABLED`, `SOUND_VOLUME`, `SAMPLE_RATE` in config.
+- Per-mode high scores: `highscore.json` is now a JSON dict such as
+  `{"classic": 120, "wrap": 40}`; legacy single-number files are migrated
+  automatically; corrupt files still fall back safely.
+- Menu shows the selected mode (`< WRAP MODE >`) and that mode's high score.
+- Tests: 37 new (97 total) covering mode labels/cycling, wrap edge
+  teleporting, maze obstacle placement/gap/immutability, obstacle kills and
+  shield survival, per-mode score persistence with legacy migration, and the
+  full audio module (synthesis ranges/lengths, PCM buffering, mono/stereo,
+  SoundBank fallbacks, play() never raising).
+
+### Changed
+- `high_score` is now a read-only property of the current mode; the save
+  path writes `_high_scores[mode]`.
+- The chosen mode persists across game-over → menu → next run.
+
 ## 2.2 - 2026-11-14
 
 ### Added

@@ -10,13 +10,16 @@ Controls: ENTER/SPACE start | Arrows move | P pause | C replay | Q menu | ESC qu
 Run tests with:  python -m unittest test_snake -v
 """
 
+import json
 import math
 import random
 from collections import deque
 
 import pygame
 
+import audio
 import config
+import modes
 import particles
 import powerups
 
@@ -39,23 +42,38 @@ DIRECTIONS = {
 
 
 class SnakeGame:
-    def __init__(self, highscore_file=None):
+    def __init__(self, highscore_file=None, mode=None):
         self.high_score_file = highscore_file or config.HIGHSCORE_FILE
-        self.high_score = self._load_high_score()
+        self.mode = mode or config.DEFAULT_MODE
+        self._high_scores = self._load_high_scores()
+        self.audio = audio.SoundBank()
         self._reset_to_menu()
 
     # ---------- persistence ----------
-    def _load_high_score(self):
+    @property
+    def high_score(self):
+        """Best score for the CURRENT mode."""
+        return self._high_scores.get(self.mode, 0)
+
+    def _load_high_scores(self):
+        """Load the per-mode score dict, migrating the legacy plain number."""
         try:
             with open(self.high_score_file) as f:
-                return int(f.read().strip())
-        except (FileNotFoundError, ValueError):
-            return 0
+                data = json.load(f)
+        except (FileNotFoundError, ValueError, OSError):
+            return {}
+        if isinstance(data, int) and not isinstance(data, bool):
+            data = {config.DEFAULT_MODE: data}   # legacy single-score file
+        if not isinstance(data, dict):
+            return {}
+        return {k: v for k, v in data.items()
+                if isinstance(k, str) and isinstance(v, int)
+                and not isinstance(v, bool)}
 
-    def _save_high_score(self):
+    def _save_high_scores(self):
         try:
             with open(self.high_score_file, 'w') as f:
-                f.write(str(self.high_score))
+                json.dump(self._high_scores, f)
         except OSError:
             pass
 
@@ -100,8 +118,9 @@ class SnakeGame:
         self.food = self._spawn_food()
 
     def _free_cells(self, exclude=()):
-        """All grid cells not occupied by the snake (minus explicit excludes)."""
+        """All grid cells not occupied by the snake or obstacles."""
         occupied = set(self.snake)
+        occupied.update(modes.obstacle_cells(self.mode))
         occupied.update(c for c in exclude if c is not None)
         return [
             (x, y)
@@ -151,25 +170,34 @@ class SnakeGame:
         hx, hy = self.snake[0]
         nx, ny = hx + dx * self.snake_block, hy + dy * self.snake_block
 
-        # 1. Wall collision (checked BEFORE moving - snake never leaves bounds)
-        if nx < 0 or ny < 0 or nx >= config.SCREEN_WIDTH or ny >= config.SCREEN_HEIGHT:
+        # 1. Edges: wrap mode teleports, other modes kill on leaving bounds.
+        if modes.wraps(self.mode):
+            nx %= config.SCREEN_WIDTH
+            ny %= config.SCREEN_HEIGHT
+        elif nx < 0 or ny < 0 or nx >= config.SCREEN_WIDTH or ny >= config.SCREEN_HEIGHT:
             self._game_over()
             return
 
-        # 2. Self collision. The tail cell vacates this step, so exclude it.
+        # 2. Obstacles (maze mode). An active shield grants immunity.
+        if self.shield_steps <= 0 and (nx, ny) in modes.obstacle_cells(self.mode):
+            self._game_over()
+            return
+
+        # 3. Self collision. The tail cell vacates this step, so exclude it.
         #    An active shield grants immunity (walls still kill).
         if self.shield_steps <= 0 and (nx, ny) in set(list(self.snake)[:-1]):
             self._game_over()
             return
 
-        # 3. Move (only after surviving the checks above)
+        # 4. Move (only after surviving the checks above)
         self.snake.appendleft((nx, ny))
 
-        # 4. Food: grow, respawn, burst, maybe spawn a power-up, level up.
+        # 5. Food: grow, respawn, burst, maybe spawn a power-up, level up.
         if self.food is not None and (nx, ny) == self.food:
             self.score += config.POINTS_PER_FOOD
             self.length += 1
             self.food = self._spawn_food()
+            self.audio.play('eat')
             self.particles.spawn_burst(nx + self.snake_block // 2,
                                        ny + self.snake_block // 2,
                                        config.GREEN)
@@ -180,7 +208,7 @@ class SnakeGame:
             while len(self.snake) > self.length:
                 self.snake.pop()
 
-        # 5. Pick up a power-up if the head landed on it (after the tail
+        # 6. Pick up a power-up if the head landed on it (after the tail
         #    bookkeeping above, so a length bonus lands on the final body).
         if self.powerup is not None and (nx, ny) == self.powerup.cell:
             pu, self.powerup = self.powerup, None
@@ -201,6 +229,7 @@ class SnakeGame:
                 self.snake.append(tail)   # duplicated tail spreads as snake moves
         self.particles.spawn_burst(pu.cell[0] + b // 2, pu.cell[1] + b // 2,
                                    powerups.color(pu.kind))
+        self.audio.play('pickup')
         self._check_level_up()
 
     def _check_level_up(self):
@@ -210,6 +239,7 @@ class SnakeGame:
             self.speed = min(self.speed + config.SPEED_INCREMENT,
                              config.MAX_SPEED)
             self.next_level += config.POINTS_PER_LEVEL
+            self.audio.play('levelup')
 
     def effective_speed(self):
         """FPS for the clock: base speed plus any active boost."""
@@ -218,9 +248,10 @@ class SnakeGame:
 
     def _game_over(self):
         self.state = 'game_over'
+        self.audio.play('gameover')
         if self.score > self.high_score:
-            self.high_score = self.score
-            self._save_high_score()
+            self._high_scores[self.mode] = self.score
+            self._save_high_scores()
 
     # ---------- events ----------
     def handle_event(self, event):
@@ -233,6 +264,10 @@ class SnakeGame:
         if self.state == 'menu':
             if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                 self.start_run()
+            elif event.key == pygame.K_LEFT:
+                self.mode = modes.cycle(self.mode, -1)
+            elif event.key == pygame.K_RIGHT:
+                self.mode = modes.cycle(self.mode, 1)
             elif event.key == pygame.K_ESCAPE:
                 self.state = 'quit'
         elif self.state == 'playing':
@@ -281,9 +316,15 @@ class SnakeGame:
             f'Score: {self.score}   Level: {self.level}', True, config.BLACK)
         dis.blit(hud, (5, 5))
         hs = font_small.render(
-            f'High score: {self.high_score}', True, config.WHITE)
+            f'High score ({self.mode}): {self.high_score}',
+            True, config.WHITE)
         dis.blit(hs, (config.SCREEN_WIDTH - hs.get_width() - 10,
                       config.SCREEN_HEIGHT - 30))
+
+        # Static obstacles (maze mode).
+        for x, y in modes.obstacle_cells(self.mode):
+            pygame.draw.rect(dis, config.OBSTACLE_COLOR,
+                             [x, y, self.snake_block, self.snake_block])
 
         # Food: pulsing size, shine at the bright phase; red while shielded.
         if self.food:
@@ -351,9 +392,13 @@ class SnakeGame:
         self._center_text('SNAKE GAME', font_large, config.GREEN, -120)
         self._center_text(f'High score: {self.high_score}',
                           font_medium, config.WHITE, -40)
-        self._center_text('Press ENTER to start', font_medium, config.YELLOW, 40)
+        self._center_text(f'< {modes.label(self.mode)} MODE >',
+                          font_medium, config.YELLOW, 10)
+        self._center_text('LEFT / RIGHT arrows: change mode',
+                          font_small, config.WHITE, 45)
+        self._center_text('Press ENTER to start', font_medium, config.YELLOW, 95)
         self._center_text('Arrows: move   P: pause   ESC: quit',
-                          font_small, config.WHITE, 110)
+                          font_small, config.WHITE, 150)
 
     def _center_text(self, text, font, color, y_offset):
         surf = font.render(text, True, color)

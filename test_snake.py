@@ -5,6 +5,7 @@ Covers startup/state flow, movement, eating, buffering, collisions,
 progression, pause, game over, persistence, power-ups, visuals, and
 edge cases (board full, long snakes, input spam).
 """
+import json
 import os
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ os.environ.setdefault('SDL_VIDEODRIVER', 'dummy')  # headless testing
 import pygame  # noqa: E402
 
 import config  # noqa: E402
+import modes  # noqa: E402
 import powerups  # noqa: E402
 import snake   # noqa: E402
 
@@ -50,19 +52,30 @@ def run_until_game_over(game, max_steps=400):
 
 class GameTestBase(unittest.TestCase):
     def setUp(self):
-        # Isolate highscore.json inside a temp working directory and
-        # disable random power-up spawns by default (tests opt in).
+        # Isolate highscore.json inside a temp working directory, disable
+        # random power-up spawns by default (tests opt in), and silence
+        # the sound bank (audio tests live in test_audio.py).
         self._tmp = tempfile.TemporaryDirectory()
         self._old_cwd = os.getcwd()
         os.chdir(self._tmp.name)
         self._no_spawn = mock.patch('random.random', return_value=1.0)
         self._no_spawn.start()
+        self._quiet = mock.patch.object(config, 'SOUND_ENABLED', False)
+        self._quiet.start()
         self.game = snake.SnakeGame()
 
     def tearDown(self):
+        self._quiet.stop()
         self._no_spawn.stop()
         os.chdir(self._old_cwd)
         self._tmp.cleanup()
+
+    def _reach_game_over(self):
+        self.game.start_run()
+        force_eat(self.game)
+        self.game.food = (0, 0)
+        run_until_game_over(self.game)
+        self.assertEqual(self.game.state, 'game_over')
 
 
 class SnakeGameTest(GameTestBase):
@@ -166,8 +179,8 @@ class SnakeGameTest(GameTestBase):
         self.assertEqual(self.game.state, 'game_over')
         self.assertEqual(self.game.high_score, config.POINTS_PER_FOOD)
         with open(self.game.high_score_file) as f:
-            self.assertEqual(f.read().strip(),
-                             str(config.POINTS_PER_FOOD))
+            self.assertEqual(json.load(f),
+                             {config.DEFAULT_MODE: config.POINTS_PER_FOOD})
 
     def test_self_collision_ends_run(self):
         self.game.start_run()
@@ -237,13 +250,6 @@ class SnakeGameTest(GameTestBase):
 
     # ---------- game over screen ----------
 
-    def _reach_game_over(self):
-        self.game.start_run()
-        force_eat(self.game)
-        self.game.food = (0, 0)
-        run_until_game_over(self.game)
-        self.assertEqual(self.game.state, 'game_over')
-
     def test_c_restarts_from_game_over(self):
         self._reach_game_over()
         press(self.game, pygame.K_c)
@@ -296,7 +302,8 @@ class SnakeGameTest(GameTestBase):
         self.assertEqual(game.state, 'game_over')
         self.assertEqual(game.high_score, config.POINTS_PER_FOOD)
         with open('highscore.json') as f:
-            self.assertEqual(f.read().strip(), str(config.POINTS_PER_FOOD))
+            self.assertEqual(json.load(f),
+                             {config.DEFAULT_MODE: config.POINTS_PER_FOOD})
 
     # ---------- rendering ----------
 
@@ -523,6 +530,148 @@ class EdgeCaseTest(GameTestBase):
         self.assertEqual(self.game.state, 'paused')
         press(self.game, pygame.K_p)
         self.assertEqual(self.game.state, 'playing')
+
+
+class ModeTest(GameTestBase):
+    """Game modes: selection on the menu, wrap edges, maze obstacles."""
+
+    def test_default_mode_is_configured_default(self):
+        self.assertEqual(self.game.mode, config.DEFAULT_MODE)
+
+    def test_menu_left_right_cycles_modes(self):
+        self.assertEqual(self.game.mode, 'classic')
+        press(self.game, pygame.K_RIGHT)
+        self.assertEqual(self.game.mode, 'wrap')
+        press(self.game, pygame.K_RIGHT)
+        self.assertEqual(self.game.mode, 'maze')
+        press(self.game, pygame.K_RIGHT)
+        self.assertEqual(self.game.mode, 'classic')   # wraps around
+        press(self.game, pygame.K_LEFT)
+        self.assertEqual(self.game.mode, 'maze')
+
+    def test_arrow_keys_do_not_move_snake_on_menu(self):
+        press(self.game, pygame.K_RIGHT)
+        self.assertEqual(self.game.state, 'menu')
+        self.assertEqual(len(self.game.snake), 0)
+
+    def test_run_starts_in_selected_mode(self):
+        press(self.game, pygame.K_RIGHT)             # wrap
+        press(self.game, pygame.K_RETURN)
+        self.assertEqual(self.game.state, 'playing')
+        self.assertEqual(self.game.mode, 'wrap')
+
+    # ---------- wrap mode ----------
+
+    def _wrap_game(self):
+        game = snake.SnakeGame(mode='wrap')
+        game.start_run()
+        game.food = (0, 0)                           # off the snake's path
+        return game
+
+    def test_wrap_right_edge_teleports_to_left(self):
+        game = self._wrap_game()
+        # Head starts at (400, 300); after 40 right-steps it lands on x=800,
+        # which wraps to x=0 instead of killing the snake.
+        for _ in range(40):
+            game._step()
+        self.assertEqual(game.state, 'playing')
+        self.assertEqual(game.snake[0], (0, 300))
+
+    def test_wrap_left_edge_teleports_to_right(self):
+        game = self._wrap_game()
+        game.snake.clear()
+        game.snake.extend([(0, 300), (10, 300), (20, 300)])
+        game.direction = (-1, 0)
+        game._step()
+        self.assertEqual(game.state, 'playing')
+        self.assertEqual(game.snake[0], (790, 300))
+
+    def test_wrap_has_no_obstacles(self):
+        game = self._wrap_game()
+        self.assertEqual(modes.obstacle_cells(game.mode), frozenset())
+
+    def test_wrap_high_score_saved_under_its_own_key(self):
+        game = self._wrap_game()
+        force_eat(game)                              # score 10
+        game.snake.clear()
+        game.snake.extend([(130, 100), (120, 100), (110, 100), (100, 100)])
+        game.direction = (-1, 0)
+        game._step()                                 # self collision
+        self.assertEqual(game.state, 'game_over')
+        self.assertEqual(game.high_score, config.POINTS_PER_FOOD)
+        with open('highscore.json') as f:
+            self.assertEqual(json.load(f),
+                             {'wrap': config.POINTS_PER_FOOD})
+
+    # ---------- maze mode ----------
+
+    def test_maze_spawns_avoid_obstacles(self):
+        game = snake.SnakeGame(mode='maze')
+        game.start_run()
+        obstacles = modes.obstacle_cells('maze')
+        self.assertNotIn(game.food, obstacles)
+        with mock.patch('random.random', return_value=0.0):
+            force_eat(game)                          # spawns a power-up
+            if game.powerup:
+                self.assertNotIn(game.powerup.cell, obstacles)
+
+    def test_maze_obstacle_kills_snake(self):
+        game = snake.SnakeGame(mode='maze')
+        game.start_run()
+        # (200, 200) is on a maze bar; approach it from the left.
+        game.snake.clear()
+        game.snake.extend([(190, 200), (180, 200), (170, 200)])
+        game.direction = (1, 0)
+        game.food = (0, 0)
+        game._step()
+        self.assertEqual(game.state, 'game_over')
+
+    def test_maze_obstacle_survivable_with_shield(self):
+        game = snake.SnakeGame(mode='maze')
+        game.start_run()
+        game.snake.clear()
+        game.snake.extend([(190, 200), (180, 200), (170, 200)])
+        game.direction = (1, 0)
+        game.food = (0, 0)
+        game.shield_steps = 2
+        game._step()
+        self.assertEqual(game.state, 'playing')
+        self.assertEqual(game.snake[0], (200, 200))
+
+    def test_mode_persists_across_game_over_to_menu(self):
+        press(self.game, pygame.K_RIGHT)             # wrap
+        press(self.game, pygame.K_RETURN)
+        self.game.snake.clear()
+        self.game.snake.extend([(130, 100), (120, 100),
+                                (110, 100), (100, 100)])
+        self.game.direction = (-1, 0)
+        self.game.food = (0, 0)
+        run_until_game_over(self.game)
+        press(self.game, pygame.K_q)                 # back to menu
+        self.assertEqual(self.game.state, 'menu')
+        self.assertEqual(self.game.mode, 'wrap')
+        press(self.game, pygame.K_RETURN)            # still wrap next run
+        self.assertEqual(self.game.mode, 'wrap')
+
+    def test_high_score_is_per_mode(self):
+        self._reach_game_over()                      # classic run, score 10
+        self.assertEqual(self.game.high_score, config.POINTS_PER_FOOD)
+        press(self.game, pygame.K_q)                 # menu
+        press(self.game, pygame.K_RIGHT)             # switch to wrap
+        self.assertEqual(self.game.mode, 'wrap')
+        self.assertEqual(self.game.high_score, 0)    # wrap has no score yet
+        press(self.game, pygame.K_LEFT)              # back to classic
+        self.assertEqual(self.game.mode, 'classic')
+        self.assertEqual(self.game.high_score, config.POINTS_PER_FOOD)
+        with open('highscore.json') as f:
+            self.assertEqual(json.load(f),
+                             {config.DEFAULT_MODE: config.POINTS_PER_FOOD})
+
+    def test_draw_does_not_crash_in_every_mode(self):
+        for mode in config.GAME_MODES:
+            game = snake.SnakeGame(mode=mode)
+            game.start_run()
+            game.draw()
 
 
 if __name__ == '__main__':
