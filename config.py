@@ -30,6 +30,20 @@ BODY_GRAY_MAX = 70        # body gradient intensity at the tail
 # Persistence
 HIGHSCORE_FILE = 'highscore.json'
 
+# Power-ups
+POWERUP_CHANCE = 0.2      # chance that eating food also spawns a power-up
+POWERUP_TYPES = ['shield', 'speed', 'length']
+POWERUP_POINTS = 20       # score awarded for collecting one
+SHIELD_STEPS = 50         # steps of self-collision immunity
+BOOST_STEPS = 50          # steps of increased speed
+SPEED_BOOST_AMOUNT = 10   # extra FPS while boosted (base speed untouched)
+LENGTH_BONUS = 5          # extra segments granted instantly
+
+# Visual effects
+FOOD_PULSE_PERIOD = 20    # frames per food pulsing cycle
+PARTICLE_COUNT = 12       # particles per burst
+PARTICLE_LIFETIME = 25    # frames a particle lives
+
 # Colors
 BACKGROUND_COLOR = (50, 153, 213)
 WHITE = (255, 255, 255)

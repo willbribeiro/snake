@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.2 - 2026-11-14
+
+### Added
+- Power-up system (previously scaffolding-only, now fully integrated):
+  - Spawns on a free cell when food is eaten (20% chance, max one on board);
+    collected by the head for +20 points.
+  - Shield: immune to self-collision for 50 steps (walls still kill).
+  - Speed boost: +10 FPS for 50 steps; base level speed untouched, so
+    level-ups remain correct.
+  - Length bonus: +5 segments instantly (duplicated tail spreads as the
+    snake moves).
+  - HUD banners for active timed effects; food turns red while shielded.
+  - Timers measured in game steps (FPS-independent, deterministic).
+- Particle effects: burst on eating (green) and on power-up pickup
+  (power-up color); deterministic per-particle physics.
+- Food visuals: pulsing size animation with a shine at the bright phase.
+- Level-ups now use a running threshold instead of `score % 50`, so
+  power-up points can also trigger them correctly.
+- Tests: 31 new (60 total) covering power-up spawning/pickup/expiry rules,
+  particle lifecycle, visual state, and edge cases (board full, food None,
+  1000-segment snake, key spam, rapid pause toggling).
+
+### Changed
+- Food spawning also excludes the power-up's cell; power-up spawning
+  excludes food (items can never overlap).
+
 ## 2.1 - 2026-11-14
 
 ### Changed

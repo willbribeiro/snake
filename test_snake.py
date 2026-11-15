@@ -1,18 +1,22 @@
 """Test suite for snake.py.
 
-Run with:  python -m unittest test_snake -v
-Covers the exact crash scenarios that previously occurred (instant game
-over on startup, frozen window) plus gameplay rules and persistence.
+Run with:  python -m unittest discover -v
+Covers startup/state flow, movement, eating, buffering, collisions,
+progression, pause, game over, persistence, power-ups, visuals, and
+edge cases (board full, long snakes, input spam).
 """
 import os
 import tempfile
 import unittest
+from collections import deque
+from unittest import mock
 
 os.environ.setdefault('SDL_VIDEODRIVER', 'dummy')  # headless testing
 
 import pygame  # noqa: E402
 
 import config  # noqa: E402
+import powerups  # noqa: E402
 import snake   # noqa: E402
 
 
@@ -28,6 +32,15 @@ def force_eat(game):
     game._step()
 
 
+def place_powerup_ahead(game, kind):
+    """Put a power-up on the cell the head will enter next."""
+    hx, hy = game.snake[0]
+    dx, dy = game.direction
+    cell = (hx + dx * game.snake_block, hy + dy * game.snake_block)
+    game.powerup = powerups.PowerUp(kind, cell)
+    return cell
+
+
 def run_until_game_over(game, max_steps=400):
     for _ in range(max_steps):
         if game.state != 'playing':
@@ -35,18 +48,24 @@ def run_until_game_over(game, max_steps=400):
         game._step()
 
 
-class SnakeGameTest(unittest.TestCase):
+class GameTestBase(unittest.TestCase):
     def setUp(self):
-        # Isolate highscore.json writes inside a temp working directory.
+        # Isolate highscore.json inside a temp working directory and
+        # disable random power-up spawns by default (tests opt in).
         self._tmp = tempfile.TemporaryDirectory()
         self._old_cwd = os.getcwd()
         os.chdir(self._tmp.name)
+        self._no_spawn = mock.patch('random.random', return_value=1.0)
+        self._no_spawn.start()
         self.game = snake.SnakeGame()
 
     def tearDown(self):
+        self._no_spawn.stop()
         os.chdir(self._old_cwd)
         self._tmp.cleanup()
 
+
+class SnakeGameTest(GameTestBase):
     # ---------- startup / menu ----------
 
     def test_starts_on_menu_with_empty_snake(self):
@@ -290,6 +309,220 @@ class SnakeGameTest(unittest.TestCase):
         press(self.game, pygame.K_p)
         self._reach_game_over()
         self.game.draw()                         # game over
+
+
+class PowerUpTest(GameTestBase):
+    # ---------- spawning ----------
+
+    def test_no_powerup_on_fresh_run(self):
+        self.game.start_run()
+        self.assertIsNone(self.game.powerup)
+        self.assertEqual(self.game.shield_steps, 0)
+        self.assertEqual(self.game.boost_steps, 0)
+
+    def test_powerup_spawns_on_eating_when_roll_hits(self):
+        with mock.patch('random.random', return_value=0.0):
+            self.game.start_run()
+            force_eat(self.game)
+        self.assertIsNotNone(self.game.powerup)
+        cell = self.game.powerup.cell
+        self.assertIn(self.game.powerup.kind, config.POWERUP_TYPES)
+        self.assertNotIn(cell, set(self.game.snake))
+        self.assertNotEqual(cell, self.game.food)
+
+    def test_no_powerup_spawn_when_roll_misses(self):
+        # setUp patches random.random -> 1.0 (always miss)
+        self.game.start_run()
+        force_eat(self.game)
+        self.assertIsNone(self.game.powerup)
+
+    def test_only_one_powerup_on_board(self):
+        with mock.patch('random.random', return_value=0.0):
+            self.game.start_run()
+            force_eat(self.game)
+            self.game.powerup.cell = (0, 0)      # pin it off the snake's path
+            first = self.game.powerup.cell
+            force_eat(self.game)                 # would roll again
+        self.assertEqual(self.game.powerup.cell, first)
+
+    def test_powerup_never_spawns_on_food_or_snake(self):
+        with mock.patch('random.random', return_value=0.0):
+            self.game.start_run()
+            for _ in range(10):
+                force_eat(self.game)
+                if self.game.powerup:
+                    self.assertNotIn(self.game.powerup.cell,
+                                     set(self.game.snake))
+                    self.assertNotEqual(self.game.powerup.cell,
+                                        self.game.food)
+                    # keep it off the snake's straight-line path
+                    self.game.powerup.cell = (0, 0)
+
+    # ---------- shield ----------
+
+    def test_shield_pickup_activates_and_scores(self):
+        self.game.start_run()
+        self.game.food = (0, 0)                  # keep the path food-free
+        place_powerup_ahead(self.game, 'shield')
+        self.game._step()
+        self.assertEqual(self.game.shield_steps, config.SHIELD_STEPS)
+        self.assertEqual(self.game.score, config.POWERUP_POINTS)
+        self.assertIsNone(self.game.powerup)
+
+    def test_shield_prevents_self_collision_death(self):
+        self.game.start_run()
+        self.game.snake.clear()
+        self.game.snake.extend([(130, 100), (120, 100), (110, 100), (100, 100)])
+        self.game.direction = (-1, 0)
+        self.game.food = (0, 0)
+        self.game.shield_steps = 2
+        self.game._step()                        # head enters (120,100)
+        self.assertEqual(self.game.state, 'playing')
+        self.assertEqual(self.game.snake[0], (120, 100))
+        self.assertEqual(self.game.shield_steps, 1)
+
+    def test_shield_expires(self):
+        self.game.start_run()
+        self.game.shield_steps = 1
+        self.game.food = (0, 0)
+        self.game._step()                        # timer reaches 0
+        self.assertEqual(self.game.shield_steps, 0)
+        # Now the same self-collision setup is fatal again.
+        self.game.snake.clear()
+        self.game.snake.extend([(130, 100), (120, 100), (110, 100), (100, 100)])
+        self.game.direction = (-1, 0)
+        self.game._step()
+        self.assertEqual(self.game.state, 'game_over')
+
+    def test_shield_does_not_prevent_wall_death(self):
+        self.game.start_run()
+        force_eat(self.game)
+        self.game.food = (0, 0)
+        self.game.shield_steps = 999
+        run_until_game_over(self.game)
+        self.assertEqual(self.game.state, 'game_over')
+
+    # ---------- speed boost ----------
+
+    def test_speed_pickup_boosts_effective_speed_only(self):
+        self.game.start_run()
+        self.game.food = (0, 0)
+        base = self.game.speed
+        place_powerup_ahead(self.game, 'speed')
+        self.game._step()
+        self.assertEqual(self.game.boost_steps, config.BOOST_STEPS)
+        self.assertEqual(self.game.effective_speed(),
+                         base + config.SPEED_BOOST_AMOUNT)
+        self.assertEqual(self.game.speed, base)  # base untouched
+
+    def test_speed_boost_expires(self):
+        self.game.start_run()
+        base = self.game.speed
+        self.game.boost_steps = 1
+        self.game.food = (0, 0)
+        self.game._step()
+        self.assertEqual(self.game.boost_steps, 0)
+        self.assertEqual(self.game.effective_speed(), base)
+
+    # ---------- length bonus ----------
+
+    def test_length_bonus_instantly_adds_segments(self):
+        self.game.start_run()
+        self.game.food = (0, 0)
+        before = len(self.game.snake)
+        place_powerup_ahead(self.game, 'length')
+        self.game._step()
+        self.assertEqual(self.game.length, before + config.LENGTH_BONUS)
+        self.assertEqual(len(self.game.snake), before + config.LENGTH_BONUS)
+        self.assertEqual(self.game.state, 'playing')
+
+    def test_powerup_points_can_trigger_level_up(self):
+        self.game.start_run()
+        self.game.score = config.POINTS_PER_LEVEL - config.POWERUP_POINTS
+        self.game.food = (0, 0)
+        place_powerup_ahead(self.game, 'shield')
+        self.game._step()                        # score crosses the threshold
+        self.assertEqual(self.game.level, 2)
+        self.assertEqual(self.game.next_level,
+                         2 * config.POINTS_PER_LEVEL)
+
+    # ---------- rendering ----------
+
+    def test_draw_with_active_powerup_and_effects(self):
+        self.game.start_run()
+        place_powerup_ahead(self.game, 'shield')
+        self.game.shield_steps = 5
+        self.game.boost_steps = 5
+        self.game.draw()                         # must not raise
+
+
+class VisualTest(GameTestBase):
+    def test_particles_spawned_on_eating(self):
+        self.game.start_run()
+        force_eat(self.game)
+        self.assertEqual(len(self.game.particles.particles),
+                         config.PARTICLE_COUNT)
+
+    def test_particles_cleared_on_new_run(self):
+        self.game.start_run()
+        force_eat(self.game)
+        press(self.game, pygame.K_p)             # pause -> menu -> restart
+        press(self.game, pygame.K_ESCAPE)
+        press(self.game, pygame.K_RETURN)
+        self.assertEqual(len(self.game.particles.particles), 0)
+
+    def test_frame_counter_advances_on_draw(self):
+        self.game.start_run()
+        self.assertEqual(self.game.frame, 0)
+        self.game.draw()
+        self.game.draw()
+        self.assertEqual(self.game.frame, 2)
+
+
+class EdgeCaseTest(GameTestBase):
+    def test_board_full_food_is_none_and_no_powerup(self):
+        self.game.start_run()
+        cells = [(x, y)
+                 for x in range(0, config.SCREEN_WIDTH, config.BLOCK_SIZE)
+                 for y in range(0, config.SCREEN_HEIGHT, config.BLOCK_SIZE)]
+        self.game.snake = deque(cells)
+        self.game.food = None
+        self.assertIsNone(self.game._spawn_food())
+        with mock.patch('random.random', return_value=0.0):
+            self.game._maybe_spawn_powerup()
+        self.assertIsNone(self.game.powerup)
+
+    def test_playing_survives_food_none(self):
+        self.game.start_run()
+        self.game.food = None
+        for _ in range(3):
+            self.game._step()
+        self.assertEqual(self.game.state, 'playing')
+
+    def test_long_snake_draw_does_not_crash(self):
+        self.game.start_run()
+        cells = [(10 * (i % 79), 10 * (i % 59)) for i in range(1000)]
+        self.game.snake = deque(cells)
+        self.game.draw()
+
+    def test_key_spam_capped_and_survivable(self):
+        self.game.start_run()
+        for i in range(100):
+            press(self.game, pygame.K_UP if i % 2 else pygame.K_DOWN)
+        self.assertLessEqual(len(self.game.pending), config.INPUT_BUFFER_SIZE)
+        for _ in range(5):
+            self.game._step()
+        self.assertEqual(self.game.state, 'playing')
+
+    def test_rapid_pause_toggling(self):
+        self.game.start_run()
+        for _ in range(40):
+            press(self.game, pygame.K_p)
+        self.assertEqual(self.game.state, 'playing')   # even toggles
+        press(self.game, pygame.K_p)
+        self.assertEqual(self.game.state, 'paused')
+        press(self.game, pygame.K_p)
+        self.assertEqual(self.game.state, 'playing')
 
 
 if __name__ == '__main__':
